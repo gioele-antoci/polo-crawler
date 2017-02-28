@@ -1,0 +1,28 @@
+{
+  "name": "polo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "explore.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gioele-antoci/polo.git"
+  },
+  "author": "Gioele Antoci",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gioele-antoci/polo/issues"
+  },
+  "homepage": "https://github.com/gioele-antoci/polo#readme",
+  "dependencies": {
+    "firebase": "^3.6.9",
+    "firebase-admin": "^4.1.1",
+    "himalaya": "^0.2.3",
+    "request": "^2.79.0"
+  },
+  "devDependencies": {
+    "@types/node": "^7.0.5"
+  }
+}

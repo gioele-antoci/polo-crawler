@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "target": "es2017",
+        "watch": true,
+        "module": "commonjs",
+        "sourceMap": true,
+        // types option has been previously configured
+        "types": [
+            // add node as an option
+            "node"
+        ],
+        // typeRoots option has been previously configured
+        "typeRoots": [
+            // add path to @types
+            "node_modules/@types"
+        ]
+    }
+}
