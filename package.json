@@ -20,9 +20,11 @@
     "firebase": "^3.6.9",
     "firebase-admin": "^4.1.1",
     "himalaya": "^0.2.3",
+    "parse-domain": "^1.1.0",
     "request": "^2.79.0"
   },
   "devDependencies": {
+    "@types/firebase": "^2.4.31",
     "@types/node": "^7.0.5"
   }
 }

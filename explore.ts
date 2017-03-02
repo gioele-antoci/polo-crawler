@@ -1,8 +1,9 @@
 
-var request = require("request");
-var himalaya = require('himalaya')
-var firebase = require('firebase');
-var admin = require("firebase-admin");
+const request = require("request");
+const himalaya = require('himalaya')
+const firebase = require('firebase');
+const admin = require("firebase-admin");
+const parseDomain = require("parse-domain");
 
 // Fetch the service account key JSON file contents
 const serviceAccount = require("./serviceAccountKey.json");
@@ -10,13 +11,149 @@ const serviceAccount = require("./serviceAccountKey.json");
 // Initialize the app with a service account, granting admin privileges
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://polo-64a1f.firebaseio.com"
+    databaseURL: "https://polo-crawler-f920e.firebaseio.com"
 });
 
 const db = admin.database();
 const ref = db.ref("polo/site");
 
-let hrefs = { "https://www.google.ca/": false };
+type siteEntry = {
+    [domain: string]: { site: string, crawled: boolean };
+};
+
+type siteAnalytics = {
+    maxDepth: number,
+    elements: { [tag: string]: number },
+    hrefObjs: string[],
+    childrenCount: { [count: number]: number },
+    isDeadEnd: boolean
+};
+
+
+const validTags = {
+    "!--...--": true,
+    "!DOCTYPE": true,
+    "a": true,
+    "abbr": true,
+    "acronym": true,
+    "address": true,
+    "applet": true,
+    "area": true,
+    "article": true,
+    "aside": true,
+    "audio": true,
+    "b": true,
+    "base": true,
+    "basefont": true,
+    "bdi": true,
+    "bdo": true,
+    "big": true,
+    "blockquote": true,
+    "body": true,
+    "br": true,
+    "button": true,
+    "canvas": true,
+    "caption": true,
+    "center": true,
+    "cite": true,
+    "code": true,
+    "col": true,
+    "colgroup": true,
+    "datalist": true,
+    "dd": true,
+    "del": true,
+    "details": true,
+    "dfn": true,
+    "dialog": true,
+    "dir": true,
+    "div": true,
+    "dl": true,
+    "dt": true,
+    "em": true,
+    "embed": true,
+    "fieldset": true,
+    "figcaption": true,
+    "figure": true,
+    "font": true,
+    "footer": true,
+    "form": true,
+    "frame": true,
+    "frameset": true,
+    "h1 to &lt;h6&gt;": true,
+    "head": true,
+    "header": true,
+    "hr": true,
+    "html": true,
+    "i": true,
+    "iframe": true,
+    "img": true,
+    "input": true,
+    "ins": true,
+    "kbd": true,
+    "keygen": true,
+    "label": true,
+    "legend": true,
+    "li": true,
+    "link": true,
+    "main": true,
+    "map": true,
+    "mark": true,
+    "menu": true,
+    "menuitem": true,
+    "meta": true,
+    "meter": true,
+    "nav": true,
+    "noframes": true,
+    "noscript": true,
+    "object": true,
+    "ol": true,
+    "optgroup": true,
+    "option": true,
+    "output": true,
+    "p": true,
+    "param": true,
+    "picture": true,
+    "pre": true,
+    "progress": true,
+    "q": true,
+    "rp": true,
+    "rt": true,
+    "ruby": true,
+    "s": true,
+    "samp": true,
+    "script": true,
+    "section": true,
+    "select": true,
+    "small": true,
+    "source": true,
+    "span": true,
+    "strike": true,
+    "strong": true,
+    "style": true,
+    "sub": true,
+    "summary": true,
+    "sup": true,
+    "table": true,
+    "tbody": true,
+    "td": true,
+    "textarea": true,
+    "tfoot": true,
+    "th": true,
+    "thead": true,
+    "time": true,
+    "title": true,
+    "tr": true,
+    "track": true,
+    "tt": true,
+    "u": true,
+    "ul": true,
+    "var": true,
+    "video": true,
+    "wbr": true
+}
+const entrySite = "https://www.google.ca/";
+const hrefs: siteEntry = {};
+addHrefToLocalDic(entrySite);
 
 let mustCrawl = true;
 
@@ -29,8 +166,10 @@ async function start() {
             stop();
             return;
         }
-        console.log(`crawling ${site}`)
+
+        console.time(`crawling ${site}`)
         const dom = await requestHref(site);
+        console.timeEnd(`crawling ${site}`)
         if (dom) {
             const websiteObj = parseDom(site, dom);
 
@@ -43,54 +182,53 @@ async function start() {
             websiteObj.isDeadEnd = portals.length === 0;
 
             //Add to hrefs links, already filtered out
-            portals.forEach(site => hrefs[site] = false);
+            portals.forEach(site => {
+                site = sanitizeSite(site);
+                if (isValid(site)) {
+                    addHrefToLocalDic(site);
+                }
+            });
+
             const newRef = ref.push();
             newRef.set(websiteObj);
-        }
-        else {
-            console.log(`${site} was not crawl-able`);
         }
     }
 }
 
 function getNextSiteToCrawl() {
-    const site = Object.keys(hrefs).find(key => !hrefs[key]);
-    if (site) {
-        delete hrefs[site];
-        hrefs[extractDomain(site)] = true;
-
-        return site;
+    const domain = Object.keys(hrefs).find(key => !hrefs[key].crawled);
+    if (domain) {
+        const siteObj = hrefs[domain];
+        siteObj.crawled = true;
+        return siteObj.site;
     }
     else {
         return null;
     }
 }
 
-function extractDomain(url) {
-    let domain;
-    //find & remove protocol (http, ftp, etc.) and get domain
-    if (url.indexOf("://") > -1) {
-        domain = url.split('/')[2];
-    }
-    else {
-        domain = url.split('/')[0];
-    }
-
-    //find & remove port number
-    domain = domain.split(':')[0];
-
-    return domain;
+function sanitizeSite(site: string): string {
+    return site.toLowerCase().replace(/\r?\n|\r/g, " ");
 }
 
-function isValid(justCrawledSite, site) {
-    const domainHref = extractDomain(site);
+function addHrefToLocalDic(site: string): void {
+    const domain = extractDomain(site);
+    hrefs[domain] = { site, crawled: false };
+}
 
-    //TODO: explain
-    if (domainHref === extractDomain(justCrawledSite) || typeof hrefs[domainHref] !== "undefined" || ((site.indexOf('http://') === -1 && site.indexOf('https://') === -1))) {
-        return false;
+function extractDomain(url: string): string {
+    const domainObj = parseDomain(url);
+    return domainObj ? domainObj.subdomain + domainObj.domain : null;
+}
+
+function isValid(site: string) {
+    const domainHref = extractDomain(site);
+    //we have never met this domain before 
+    if (domainHref && typeof hrefs[domainHref] === "undefined") {
+        return true;
     }
     else {
-        return true;
+        return false;
     }
 }
 
@@ -101,9 +239,9 @@ function traverse(html, node) {
             node = traverse(d, node)
             //record hrfs and tagname count
 
-            if (d.tagName) {
-                //sanitization
-                const tag = encodeURIComponent(d.tagName);
+            const tag = d.tagName;
+            if (tag && validTags[tag])
+                //sanitization                
                 if (!node.elements[tag]) {
                     node.elements[tag] = 1;
                 }
@@ -111,9 +249,8 @@ function traverse(html, node) {
                     node.elements[tag] += 1;
                 }
 
-                if (tag === "a" && !!d.attributes.href) {
-                    node.hrefObjs.push(d.attributes.href);
-                }
+            if (tag === "a" && !!d.attributes.href) {
+                node.hrefObjs.push(d.attributes.href);
             }
 
             //record how many children does each element have
@@ -133,7 +270,7 @@ function traverse(html, node) {
     return node;
 }
 
-function parseDom(hrefToParse, dom) {
+function parseDom(href: string, dom): siteAnalytics {
     let json;
     try {
         json = himalaya.parse(dom);
@@ -142,7 +279,7 @@ function parseDom(hrefToParse, dom) {
         return null;
     }
 
-    let websiteObj = {
+    let websiteObj: siteAnalytics = {
         maxDepth: 0,
         elements: {},
         hrefObjs: [],
@@ -159,29 +296,15 @@ function parseDom(hrefToParse, dom) {
 
     websiteObj = traverse(htmlTag, websiteObj);
     websiteObj.maxDepth = getDepth(htmlTag);
-
-    const tempDictionary = {};
-
-    // For each site we crawled if valid add it to a temp dictionary
-    // Make sure we dont add 2 sites with same domain. 
-    // Only last site with repeated domain will be considered
-    websiteObj.hrefObjs.forEach(hrefSite => {
-        if (isValid(hrefToParse, hrefSite)) {
-            const domain = extractDomain(hrefSite);            
-            tempDictionary[domain] = hrefSite;
-        }
-    });
-
-    websiteObj.hrefObjs = Object.keys(tempDictionary).map(key=> tempDictionary[key]);
     return websiteObj;
 }
 
 
 function getDepth(obj) {
-    var depth = 0;
+    let depth = 0;
     if (obj.children) {
         obj.children.forEach(function (d) {
-            var tmpDepth = getDepth(d)
+            const tmpDepth = getDepth(d)
             if (tmpDepth > depth) {
                 depth = tmpDepth
             }
@@ -191,15 +314,17 @@ function getDepth(obj) {
 }
 
 function stop() {
+    console.log("stopping...");
     mustCrawl = false;
 }
 
-function requestHref(url) {
+function requestHref(url: string) {
     return new Promise(function (resolve, reject) {
         request(url, function (error, res, body) {
             if (!error && res.statusCode === 200) {
                 resolve(body);
             } else {
+                console.log(`Crawling ${url} threw an error: ${error}`)
                 resolve(null);
             }
         });
