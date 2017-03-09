@@ -22,6 +22,7 @@ type siteEntry = {
 };
 
 type siteAnalytics = {
+    website: string,
     maxDepth: number,
     elements: { [tag: string]: number },
     hrefObjs: string[],
@@ -151,7 +152,7 @@ const validTags = {
     "video": true,
     "wbr": true
 }
-const entrySite = "https://www.google.ca/";
+const entrySite = "https://www.google.com";
 const hrefs: siteEntry = {};
 addHrefToLocalDic(entrySite);
 
@@ -178,20 +179,30 @@ async function start() {
                 continue;
             }
 
-            const portals = websiteObj.hrefObjs;
-            websiteObj.isDeadEnd = portals.length === 0;
-
-            //Add to hrefs links, already filtered out
-            portals.forEach(site => {
+            const portals = [];
+            //Filter and add to hrefs links
+            websiteObj.hrefObjs.forEach(site => {
                 site = sanitizeSite(site);
                 if (isValid(site)) {
                     addHrefToLocalDic(site);
+                    portals.push(site);
                 }
             });
 
-            const newRef = ref.push();
-            newRef.set(websiteObj);
+            websiteObj.hrefObjs = portals;
+            websiteObj.isDeadEnd = portals.length === 0;
+
+            writeToDb(websiteObj);
         }
+    }
+}
+
+function writeToDb(websiteObj: siteAnalytics) {
+    try {
+        const newRef = ref.push();
+        newRef.set(websiteObj);
+    }
+    catch (e) {
     }
 }
 
@@ -280,6 +291,7 @@ function parseDom(href: string, dom): siteAnalytics {
     }
 
     let websiteObj: siteAnalytics = {
+        website: href,
         maxDepth: 0,
         elements: {},
         hrefObjs: [],
@@ -324,12 +336,12 @@ function requestHref(url: string) {
             if (!error && res.statusCode === 200) {
                 resolve(body);
             } else {
-                console.log(`Crawling ${url} threw an error: ${error}`)
+                console.log(`crawling ${url} threw an error: ${error}`)
                 resolve(null);
             }
         });
     });
 }
 
-start();
-setTimeout(() => stop(), 3 * 60 * 60 * 1000);
+ref.remove().then(() => start());
+// setTimeout(() => stop(), 3 * 60 * 60 * 1000);

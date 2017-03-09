@@ -4,7 +4,7 @@
   "description": "",
   "main": "explore.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node --inspect --harmony-async-await --debug-brk explore.js"
   },
   "repository": {
     "type": "git",
@@ -17,9 +17,10 @@
   },
   "homepage": "https://github.com/gioele-antoci/polo#readme",
   "dependencies": {
+    "@types/node": "^7.0.5",
     "firebase": "^3.6.9",
     "firebase-admin": "^4.1.1",
-    "himalaya": "^0.2.3",
+    "himalaya": "^0.2.5",
     "parse-domain": "^1.1.0",
     "request": "^2.79.0"
   },
